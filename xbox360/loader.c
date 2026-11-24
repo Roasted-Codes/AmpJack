@@ -24,7 +24,10 @@
 #define PLUGIN_NAME "xa.xex" /* build.sh XA_SLOT sets xa<n>.xex */
 #endif
 #ifndef PLUGIN_PATH
-#define PLUGIN_PATH "\\Device\\Mass0\\Apps\\xadapter\\" PLUGIN_NAME
+#ifndef PLUGIN_DIR
+#define PLUGIN_DIR "xadapter" /* build.sh: "xwired" for xw.xex */
+#endif
+#define PLUGIN_PATH "\\Device\\Mass0\\Apps\\" PLUGIN_DIR "\\" PLUGIN_NAME
 #endif
 
 __attribute__((used)) volatile uint32_t g_stage[8] = {0x53544745 /* STGE */};
@@ -36,7 +39,9 @@ typedef NTSTATUS (*XexLoadImage_t)(const char *, uint32_t, uint32_t, HMODULE *);
 #define PROC_SYSTEM          2
 #define ORD_XamLoaderLaunchTitleEx 421 /* xam.xex: launch a title with its game: mount */
 
+#ifndef AURORA_DIR /* build.sh sets it for xw_loader_hdd.xex (Aurora in Hdd:\\Aurora) */
 #define AURORA_DIR  "\\Device\\Mass0\\Apps\\Aurora"
+#endif
 #define AURORA_PATH AURORA_DIR "\\Aurora.xex"
 
 typedef NTSTATUS (*XamLoaderLaunchTitleEx_t)(const char *path, const char *mount,

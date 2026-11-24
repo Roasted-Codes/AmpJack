@@ -1,0 +1,20 @@
+Headphone surround: what to listen to (any headphones, on the Mac; not speakers)
+
+These are made on the Mac by the same maths the console will run (tools/hrtf/demo.py, 64-tap
+table). "plain" is what the headset plays today; "surround" is the new mode.
+
+walk-noise-surround.wav   A hiss steps round the room: front-left, centre, front-right,
+                          back-right, back-left. Listen for: centre in front of you (not
+                          inside your head), and the back two sounding behind and to the
+                          side, not just "left" and "right".
+walk-noise-plain.wav      The same thing today: front-left and back-left sound identical.
+walk-voice-surround.wav   The same walk with a voice-like sound (one vowel per speaker).
+scene-plain.wav           A 6-second 5.1 scene as today: plucked notes front-left, ticks
+                          front-right, voice centre, rain at the back, a hiss going round
+                          the room once (front, right, behind, left, front), a low thump.
+scene-surround.wav        The same scene in surround.
+scene-switching.wav       The same scene, switching plain / surround every 1.5 s (plain
+                          first), with the console's fade at each switch: listen for clicks.
+
+Surround and plain are matched in loudness, so switching should not sound louder or
+quieter, only different.

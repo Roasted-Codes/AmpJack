@@ -6,10 +6,16 @@
 #include "../core/platform.h"
 #include "detour.h"
 
-#define TRAMPOLINES 8
+#define TRAMPOLINES 12 /* thunks_common.s reserves as many */
+#define BARRIER() __asm__ __volatile__("lwsync" ::: "memory")
 
 extern u32 xa_trampolines[TRAMPOLINES * DETOUR_TRAMPOLINE_WORDS];
 static int trampolines_used;
+
+/* this image's slots (detour.h), one per function it patched itself; and what the next
+ * build inherits. Both initialised: no .bss (build.sh) */
+static volatile u32 detour_slots[TRAMPOLINES] = { 1 };
+__attribute__((used)) struct detour_registry detour_registry = { .e = { { .original = { 1 } } } };
 
 #define OP(insn) ((insn) >> 26)
 #define OP_BC 16
@@ -57,6 +63,8 @@ static bool names_reg(u32 insn, int r)
 			return d == ur;
 		}
 		return d == ur || a == ur || b == ur;
+	case 14: case 15:                   /* addi, addis (li, lis): rA = 0 means literal 0 */
+		return d == ur || (a != 0 && a == ur);
 	case 30: case 23:                   /* MD forms, rlwnm: three registers */
 		return d == ur || a == ur || b == ur;
 	default:                            /* D/DS forms: rD/rS, rA, then an immediate */
@@ -127,12 +135,98 @@ static void flush_code(const void *p, int bytes)
 	__asm__ __volatile__("sync; isync" ::: "memory");
 }
 
+/* the jump through a slot: lis r12, slot@ha; lwz r12, slot@l(r12); mtctr r12; bctr. r12 is
+ * free at a function's entry (the linkage scratch register; the far jump used it too). */
+static void slot_jump(u32 jump[4], u32 slot)
+{
+	jump[0] = lis(12, slot + 0x8000);
+	jump[1] = 0x80000000 | 12 << 21 | 12 << 16 | (slot & 0xffff); /* lwz r12, lo(r12) */
+	jump[2] = mtctr(12);
+	jump[3] = bcctr(BO_ALWAYS, 0, 0);
+}
+
+static bool jumps_through(const u32 *t, u32 slot)
+{
+	u32 jump[4];
+
+	if (!slot)
+		return false;
+	slot_jump(jump, slot);
+	return t[0] == jump[0] && t[1] == jump[1] && t[2] == jump[2] && t[3] == jump[3];
+}
+
+static struct detour_entry *registry_find(u32 target)
+{
+	for (u32 i = 0; i < detour_registry.count && i < DETOUR_REG_MAX; i++)
+		if (detour_registry.e[i].target == target)
+			return &detour_registry.e[i];
+	return NULL;
+}
+
+bool detour_known(const void *target)
+{
+	const struct detour_entry *e = registry_find((u32)target);
+
+	return e && jumps_through(target, e->slot);
+}
+
+int detour_inherit(const struct detour_registry *from)
+{
+	int taken = 0;
+
+	if (!from || from->count > DETOUR_REG_MAX)
+		return 0;
+	for (u32 i = 0; i < from->count; i++) {
+		const struct detour_entry *e = &from->e[i];
+
+		if (!e->slot)
+			continue; /* unpatched again by its owner (detour_remove) */
+		/* kernel or XAM code, a slot and a trampoline inside a module, the patch in place */
+		if (e->target < 0x80000000u || (e->target & 3) || e->slot < 0x80000000u ||
+		    (e->slot & 3) || e->trampoline < 0x80000000u || (e->trampoline & 3) ||
+		    !jumps_through((const u32 *)e->target, e->slot)) {
+			xa_log("detour: inherited hook at %08x (slot %08x) is not in place: not taken\n",
+			       e->target, e->slot);
+			continue;
+		}
+		if (registry_find(e->target) || detour_registry.count >= DETOUR_REG_MAX)
+			continue;
+		detour_registry.e[detour_registry.count] = *e;
+		BARRIER();
+		detour_registry.count++;
+		taken++;
+	}
+	xa_log("detour: %d hook(s) inherited from the previous build\n", taken);
+	return taken;
+}
+
 int detour_install(struct detour *d, const char *name, void *target, const void *hook)
 {
 	u32 *t = target, *tr, jump[4];
 	int n = 0, scratch;
+	struct detour_entry *e = registry_find((u32)t);
+	volatile u32 *slot;
 
-	if (trampolines_used >= TRAMPOLINES)
+	if (e && jumps_through(t, e->slot)) {
+		/* an earlier build's patch: take the hook over with one store. Its trampoline
+		 * (in that build's image, which stays loaded) keeps running the original. */
+		slot = (volatile u32 *)e->slot;
+		d->name = name;
+		d->target = t;
+		d->trampoline = (u32 *)e->trampoline;
+		for (int i = 0; i < 4; i++)
+			d->original[i] = e->original[i];
+		d->slot = slot;
+		d->prev_hook = *slot;
+		d->adopted = 1;
+		BARRIER(); /* d (the hook reads d->trampoline) before the hook can run */
+		*slot = (u32)hook;
+		BARRIER();
+		xa_log("detour: %s at %08x adopted (slot %08x: %08x -> %08x, trampoline %08x)\n", name,
+		       (u32)t, (u32)slot, d->prev_hook, (u32)hook, (u32)d->trampoline);
+		return 0;
+	}
+	if (trampolines_used >= TRAMPOLINES || (!e && detour_registry.count >= DETOUR_REG_MAX))
 		return -XA_ENOSPC;
 	tr = &xa_trampolines[trampolines_used * DETOUR_TRAMPOLINE_WORDS];
 
@@ -159,12 +253,19 @@ int detour_install(struct detour *d, const char *name, void *target, const void 
 	d->trampoline = tr;
 	for (int i = 0; i < 4; i++)
 		d->original[i] = t[i];
+	slot = &detour_slots[trampolines_used];
+	d->slot = slot;
+	d->prev_hook = 0;
+	d->adopted = 0;
 	trampolines_used++;
+	*slot = (u32)hook;
+	BARRIER();
 
-	/* the jump replaces the first 4 instructions (it loads CTR via r12, free at entry).
-	 * Other hardware threads may be calling the function while we patch it: park new
-	 * arrivals on a branch-to-self first, write the rest, then release them. */
-	far_branch(jump, 12, (u32)hook, BO_ALWAYS, 0, 0);
+	/* the jump replaces the first 4 instructions (it loads CTR via r12, free at entry) and
+	 * goes through the slot, so a later build can take the hook over without patching
+	 * (detour.h). Other hardware threads may be calling the function while we patch it:
+	 * park new arrivals on a branch-to-self first, write the rest, then release them. */
+	slot_jump(jump, (u32)slot);
 	t[0] = 0x48000000; /* b . */
 	flush_code(t, 4);
 	for (int i = 1; i < 4; i++)
@@ -172,17 +273,42 @@ int detour_install(struct detour *d, const char *name, void *target, const void 
 	flush_code(t, 16);
 	t[0] = jump[0];
 	flush_code(t, 4);
-	xa_log("detour: %s hooked (trampoline %08x, %d words, scratch r%d)\n", name, (u32)tr, n,
-	       scratch);
+
+	/* for the next build: listed once the patch is in place (an entry of this function
+	 * left by a patch that is gone is reused) */
+	if (!e)
+		e = &detour_registry.e[detour_registry.count];
+	e->target = (u32)t;
+	e->slot = (u32)slot;
+	e->trampoline = (u32)tr;
+	for (int i = 0; i < 4; i++)
+		e->original[i] = d->original[i];
+	BARRIER();
+	if (e == &detour_registry.e[detour_registry.count])
+		detour_registry.count++;
+	xa_log("detour: %s hooked (trampoline %08x, %d words, scratch r%d, slot %08x)\n", name,
+	       (u32)tr, n, scratch, (u32)slot);
 	return 0;
 }
 
 void detour_remove(struct detour *d)
 {
 	u32 *t = d->target;
+	struct detour_entry *e;
 
 	if (!t)
 		return;
+	if (d->adopted) {
+		/* the previous owner's hook again (it shields or passes through): no patching */
+		*d->slot = d->prev_hook;
+		BARRIER();
+		d->target = NULL;
+		return;
+	}
+	/* no longer on offer to a next build */
+	e = registry_find((u32)t);
+	if (e)
+		e->slot = 0;
 	t[0] = 0x48000000; /* b . while the rest is restored (see detour_install) */
 	flush_code(t, 4);
 	for (int i = 1; i < 4; i++)

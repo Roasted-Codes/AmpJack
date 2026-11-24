@@ -92,10 +92,36 @@ This follows hiddriver360's route:
   driver thread.
 
 The hooks (`detour.c`) replace a function's first four instructions with a far branch and run
-the originals from a trampoline. Each trampoline builds its branch in a scratch register that
+the originals from a trampoline. The branch is indirect, through a data word in the image
+that patched the function, so a later build of the plugin takes a hook over with one store
+instead of patching again (`docs/HOT-RELOAD.md`). Each trampoline builds its branch in a scratch register that
 the relocated instructions don't use, decoded per opcode: the XAM functions start with
 `mflr r12; bl __savegprlr`, and `__savegprlr` stores r12 as the return address. While a hook is
 written, callers are parked on a `b .` instruction.
+
+### Rumble and the Vibration setting
+
+Read in the 17559 dumps, confirmed read-only on the console (`rumble_360.h`, `rumble_360.c`):
+
+- `XamInputSetState` (xam 402, `0x816F1740`) maps the user to a device (`0x816D8A58`), then
+  **ignores the title's flags** and passes the kernel's `XInputdSetState` (`0x800F6C88`) a scale
+  from XAM's per-user byte table `0x81AAC2DC` (+0x3C..+0x44: `lis r11,0x81AB; addi
+  r11,r11,-0x3D24; lbzx r4,r31,r11`): 3 if the byte is non-zero, else 0. The wired-pad driver
+  (`0x800FA178`) sends `(speed / 3) x scale >> 8` per motor, so 0 = motors off.
+- The table is the profile's **Vibration** setting, `0x10040003`
+  (`XPROFILE_OPTION_CONTROLLER_VIBRATION`): XAM's work item `0x816F2618` reads it with
+  `XamUserReadProfileSettings` for users 0..3 (3 for an index nobody is signed in on, the
+  value's non-zero test otherwise), queued at sign-in and on notification 0x0E (profile
+  setting changed, XAM dispatcher `0x816BDCFC`); boot sets all four to 3 (`0x816F4518`).
+  Live on the owner's console: `00 03 03 03` (user 0 had switched Vibration off).
+- When a title ends (XAM message 0x80000006, `0x81696328` -> `0x816F4660`), XAM calls
+  `XamInputSetState(user, 0, {0, 0})` for users 0..3. Nothing in XAM or the kernel stops the
+  motors when the Guide opens; the title does, through `XamInputSetState` like any request.
+- Our hook replaces the kernel call for our pads, so it applies the byte itself (decoded from
+  those three instructions at init, which our detour leaves alone). A GIP rumble command runs
+  about ten minutes (duration 0xFF x 10 ms, 0xEB repeats) where a 360 pad only holds a level,
+  so every stop is sent once more 100 ms later, and a title switch the plugin sees stops the
+  motors too. Status block `XWRB` (`rumble.py`, `accept/rumble.py`).
 
 Notifications use `XNotifyQueueUI` (xam 656). Its third parameter is a 64-bit value; it's
 declared 32-bit so that the text and context land in r6 and r7, as XAM expects.
@@ -109,6 +135,42 @@ priority 6, which is busy while the guide is open. At the default priority of 5 
 thread would starve whenever the guide is open, so the thread raises itself to 9 with
 `KeSetBasePriorityThread` (ordinal 153); 9 is the maximum for the system process. Its work is
 short bursts between 2 ms sleeps, and at most 64 received frames are handled per pass.
+
+### The system window: about 1 ms of CPU a frame
+
+Read in the 17559 dump. On hardware threads 2-5 (`0x8017067C` = 0x3C) the kernel lets
+priorities 0-9, the system's, run only in a short window after each vertical refresh:
+
+- The display interrupt (`0x800D03B8`) calls `0x80074E58`, which flags a window start on each
+  of those hardware threads (an IPI to the others).
+- Their dispatcher (`0x800787D0`) loads the decrementer with `0x80170680` (50000 timebase
+  ticks: **1 ms**) and sets the enabled-priority mask (PRCB +0x64) to 0xEDB403FF: 0-9 and some
+  real-time levels. The ready-thread search (`0x80077518`) only picks priorities in the mask.
+- The decrementer interrupt (`0x8007627C`) ends the window: the mask becomes 0xF6DBFC03,
+  which has 0, 1 and 10-15 (titles) but not 2-9, until the next refresh.
+- Enabled in both masks: 0, 1, 20, 23, 26, 29-31. `0x800D0468` can change the length (from a
+  percentage of the frame); nothing of ours does.
+
+So the driver thread (9, hardware thread 2) runs only in that window: one pass per frame,
+16.6 ms at 60 Hz, whatever it sleeps (`xa_sleep_ms(1)` measured 14.9 ms), and **everything a
+pass does must fit in about 1 ms**, Usbd's DPCs on the same hardware thread included. A pass
+still running when the window closes stops for the rest of the frame (~15.6 ms) and finishes
+in the next window; the draw-on-the-driver-thread pauses of `research/HUD.md` section 10 were
+this. A 5-band EQ preset (about 300 us a pass) took the pass over it: half the passes took
+33 ms. Hardware threads 0 and 1 have no window (the HUD's draw thread runs there at 15).
+
+What the loop does about it (`xw_plugin.c`, XW36 version 3, `xw.py window`):
+
+- A pass that the window stopped (its own time over 4 ms) is followed at once by the next
+  pass, in the window it resumed in, instead of a sleep into the window after (at most once
+  in a row). Counted as `win_cuts`.
+- `win_boost` (xbdm, default off): before each earpiece block and between the polls, a pass
+  past 5/8 of the window raises itself to priority 20 and finishes there; it goes back to 9
+  after its sleep, where it waits for the next window anyway. The window's end then cannot
+  stop it; it takes its overrun from the title's threads on hardware thread 2 instead.
+- `run_us` / `run_max_us`: a pass's own time, loop top to sleep. That, not XWDG `work_us`
+  (audio and voice only), is what has to stay under `win_us`. Budget new driver-thread work
+  against what is left of the window, not against the 16.6 ms pass.
 
 ## Toolchain constraints
 

@@ -52,6 +52,11 @@ int xa_usb_queue(struct xa_usb *usb, struct xa_xfer *x, void *buffer, u32 length
 /* run fn(arg) on Usbd's DPC, serialised with Usbd and the class-driver callbacks */
 void xa_usbd_run(void (*fn)(void *), void *arg);
 
+/* runs the calls the driver thread has posted; for transfer completions of other drivers
+ * in this module (they are on Usbd's DPC), so posted calls keep flowing when Usbd's
+ * processor is too busy for the queue's own DPC */
+void xa_usbd_drain(void);
+
 /* steady-state OUT mode: on = xa_usb_bulk_out submits without blocking the driver thread
  * (fire-and-forget). Off during firmware/radio bring-up, where OUT is synchronous. */
 void xa_usb_out_async(int on);

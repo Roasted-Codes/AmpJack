@@ -1,0 +1,2 @@
+# keep the upstream files byte for byte (CRLF, BOM), as CREDITS.txt says
+*.astroeq -text

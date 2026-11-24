@@ -21,6 +21,57 @@ be loaded next to a running one.
 
 Never build with `-g`: the toolchain's clang crashes emitting DWARF into COFF.
 
+### Release and development builds of `xw.xex`
+
+`bash toolchain/build.sh` passes these through to the container (both default to 0):
+
+| Switch | Effect |
+|---|---|
+| `XW_DEV=1` | Development build: compiles with `-DXW_DEV`. Probes, traces, dummy loads, dump buffers, alternative modes and verbose logs belong behind `#ifdef XW_DEV`; the release build (the default) leaves them out. Diagnostics are never deleted, only fenced, so future work can switch them back on. Console sessions that run the acceptance suite use `XW_DEV=1`. |
+| `XW_TEAM=1` | Links the real console-to-console team voice (`team_360.c`, which includes `net_360.c`). The default links `team_360_stub.c`: team voice is not verified on two consoles, so it is not published. The source, `tests/test_team*.c` and `team.py` stay. |
+
+For example `XW_DEV=1 XW_TEAM=1 bash toolchain/build.sh`. The build prints which team source
+and flags it used (`xw.xex: team voice ..., release`).
+
+What is in which build:
+
+| Release (default) and `XW_DEV=1` | `XW_DEV=1` only |
+|---|---|
+| Every status block the tools and `accept/` scripts read (XW36 / XWAU, XWDG, XV36, XVHS, XWMT, XVGA, XH36, XWPN, XWHO), with the same layout | Hot reload, both sides (`reload_360.c`): release, take-over, adoption, the gates; slot builds (`XW_SLOT`) |
+| XWPN `inject`, `xw.py tee` (it reads XW36, XWAU, XWHO, XH36, XV36 and the log) | The reload trace: `trace()` records nothing in a release build (the ring stays empty) |
+| `pass_us` / `work_us` / `gap_us` and the pass histogram (XWDG) | The loop-timing probe (XWDG `probe`, `micdsp_360.c`) |
+| The detour slots (`detour.c`): how every hook is installed | The audio self-test (audio stage 5's tone and the mic analysis), the 64 KB mic dump (allocated when `xw.py micdump` first asks), `usbreset`, `hsrestart`, `mecreset` (`selftest_360.c`) |
+| The software sidetone, the test tone, the earpiece dump (`xw.py dump`) | `XW_STAGED` and `XW_NO_AUTH` (the build stops with an error without `XW_DEV`) |
+
+A release build sets XWAU `release` (what was `reserved[0]`) to 1; `xw.py` then refuses the
+`XW_DEV` commands (`reload`, `trace`, `gate`, `micdump`, `usbreset`, `mecreset`, `hsrestart`,
+`audio 5`, `tone`, `diag probe`) with "needs an XW_DEV build" instead of waiting for an
+answer. Fenced code is never deleted: the bodies are unchanged and compile again with the
+switch. Release stubs (`xw_priv.h`, `micdsp_360.c`) do what the real code does when nothing
+asks for it.
+
+Install a build and reboot: `python3 xw.py install` (copies `out/xw.xex`, and `out/xw.presets`
+if it is there, to `Hdd:\Plugins`, keeps the previous build as `xw.xex.prev`, reads the new
+file back to check it, then `magicboot cold`; `--no-reboot` stops after the check).
+
+### The plugin's files (`xw.xex`)
+
+| File | What | Thread |
+|---|---|---|
+| `xw_plugin.c` | Class driver, USB transfers, headset audio (isochronous), the driver thread and its loop | Usbd's DPC / driver thread |
+| `reload_360.c`, `selftest_360.c` | Hot reload; the audio self-test, mic dump and USB commands (`XW_DEV` only) | driver thread, some on Usbd's DPC |
+| `xw_priv.h` | What those three share, and the release stubs | |
+| `voice_360.c` | The virtual 360 headset (XVoiced hooks, packet rings), `xv_mic_samples` / `xv_earpiece_fill` / `xv_poll`: the mic chain and the earpiece mix, in the frozen order | hooks on title threads, the rest driver thread |
+| `side_360.c` | Sidetone (software and the headset's own), headset volume, hiss control, centre tick, mic mute (XVHS) | driver thread |
+| `micdsp_360.c` | The mic's DC removal, gate, meter, volume, limiter; the test tone; loop timing; `xd_poll` (XWDG). `mic_to_360` is the decimator's hook point | driver thread |
+| `mictest_360.c` | The mic test and its contract adapters (XWMT) | driver thread |
+| `voice_priv.h` | What the four audio files share | |
+| `game_360.c` | Game audio: the render-thread tap and the stereo ring | render thread / driver thread |
+| `panel_360.c`, `hud_360.c`, `hud_panel.c` | The Share panel: gestures and rows, the swap hook and draw thread, the drawing | driver thread / draw thread |
+| `xinput_360.c`, `detour.c`, `platform_360.c` | XInput hooks and the XAM thread; the detour slots; Usbd calls, logging, allocation | |
+| `eq_360.c`, `settings_360.c`, `file_360.c`, `surround_360.c` | Feature modules (stubs until their package lands); called from `xv_earpiece_fill` (`xq_process`) and the driver thread (`xf_init`, `xq_init`, `xs_init` at start; `xq_poll`, `xs_poll` every pass; `*_quiesce` / `*_resume` in hot reload) | |
+| `kernel_360.h`, `dsp_360.h` | Shared helpers: `BARRIER`, `HOOK` / `BODY`, `struct sig`, the NV64 thunk macro; `clamp16`, `isin`, `isqrt`. Add to these instead of copying a helper | |
+
 ## Testing the core on Linux
 
 `linux/` runs the same core on libusb, which is much easier to debug than the console. The

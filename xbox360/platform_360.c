@@ -5,6 +5,7 @@
  * goes to the kernel pool and formatting is done here.
  */
 #include <stdarg.h>
+#include <stdlib.h> /* malloc: rx_ring */
 
 #include <xecore/xboxkrnl.h>
 
@@ -118,6 +119,11 @@ static void drain_calls(void)
 	drain_busy = 0;
 }
 
+void xa_usbd_drain(void)
+{
+	drain_calls();
+}
+
 void XaCallDpcC(struct kdpc360 *dpc, void *context, void *arg1, void *arg2)
 {
 	(void)dpc, (void)context, (void)arg1, (void)arg2;
@@ -200,7 +206,10 @@ struct rx_hdr {
 
 volatile u32 xa_rx_dropped, xa_rx_errors;
 static struct xa_usb *rx_usb;
-static u8 rx_ring[RX_RING_SIZE] __attribute__((aligned(128)));
+/* RX_RING_SIZE bytes, allocated by the first xa_usb_start_in: the adapter's thread, before it
+ * queues the first IN transfer, so no completion (XaInDoneC, Usbd's DPC) can run before it
+ * exists. 128 KB of image otherwise; xw.xex links this file but never calls start_in. */
+static u8 *rx_ring;
 static volatile u32 rx_write, rx_read; /* write: the DPC's, read: the thread's */
 static u8 rx_frame[RX_FRAME_MAX] __attribute__((aligned(4)));
 
@@ -282,6 +291,8 @@ int xa_usb_start_in(struct xa_usb *usb, struct xa_xfer *x, u8 ep, u8 *buf, u32 s
 		xa_log("usb: IN buffer %08x+%#x spans two transfer descriptors\n", (u32)buf, size);
 		return -XA_EINVAL;
 	}
+	if (!rx_ring && !(rx_ring = malloc(RX_RING_SIZE)))
+		return -XA_ENOMEM;
 	rx_usb = usb;
 	x->buffer = buf;
 	x->size = size;

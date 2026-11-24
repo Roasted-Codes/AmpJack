@@ -44,27 +44,44 @@ BUTTONS = [(1 << 2, "Menu"), (1 << 3, "View"), (1 << 4, "A"), (1 << 5, "B"), (1 
 
 
 def pe_va(path, tag):
-    """virtual address of the first occurrence of tag in a PE file's sections"""
+    """virtual address of a status block's magic in a PE file: the first word-aligned occurrence
+    of tag in .data, where every block lives. Other sections are searched only if .data has
+    none: the same 4 letters inside a log string in .rdata, e.g. "(XWMT enable 0)", can land
+    word-aligned too and must not be taken for the block."""
     d = open(path, "rb").read()
     pe = struct.unpack_from("<I", d, 0x3C)[0]
     nsec, opt = struct.unpack_from("<H", d, pe + 6)[0], struct.unpack_from("<H", d, pe + 20)[0]
-    base, at = struct.unpack_from("<I", d, pe + 24 + 28)[0], d.find(tag)
+    base = struct.unpack_from("<I", d, pe + 24 + 28)[0]
+    secs = []
     for k in range(nsec):
-        _, va, rs, ro = struct.unpack_from("<IIII", d, pe + 24 + opt + 40 * k + 8)
-        if ro <= at < ro + rs:
+        h = pe + 24 + opt + 40 * k
+        _, va, rs, ro = struct.unpack_from("<IIII", d, h + 8)
+        secs.append((d[h:h + 8].rstrip(b"\0") != b".data", va, rs, ro))
+    for _, va, rs, ro in sorted(secs):
+        at = d.find(tag, ro, ro + rs)
+        while at >= 0 and at % 4:
+            at = d.find(tag, at + 1, ro + rs)
+        if at >= 0:
             return base + va + at - ro
     raise SystemExit(f"{tag} not found in {path}")
 
 
 class Xbdm:
-    def __init__(self):
+    def __init__(self, timeout=10):
         if not os.environ.get("XBOX"):
             raise SystemExit("set XBOX=host[:port] to the console's address")
         host, _, port = os.environ["XBOX"].partition(":")
         import socket
-        self.s = socket.create_connection((host, int(port or 730)), timeout=10)
+        self.s = socket.create_connection((host, int(port or 730)), timeout=timeout)
         self.f = self.s.makefile("rb")
         self.f.readline()
+
+    def close(self):
+        try:
+            self.f.close()
+            self.s.close()
+        except OSError:
+            pass
 
     def cmd(self, c):
         self.s.sendall(c.encode() + b"\r\n")
@@ -106,18 +123,140 @@ class Xbdm:
     def modules(self):
         return [l.split()[0].split("=")[1].strip('"').lower() for l in self.cmd("modules")[1]]
 
+    def module_map(self):
+        """{name: (base, size)} of the loaded modules"""
+        out = {}
+        for l in self.cmd("modules")[1]:
+            f = dict(kv.split("=", 1) for kv in l.split() if "=" in kv)
+            try:
+                out[f["name"].strip('"').lower()] = (int(f["base"], 0), int(f["size"], 0))
+            except (KeyError, ValueError):
+                pass
+        return out
+
+    def setbytes(self, addr, data):
+        return self.cmd(f"setmem addr=0x{addr:08x} data={data.hex()}")[0]
+
+    def screenshot(self):
+        """xbdm's screenshot command: the front buffer as the GPU scans it out, (header, data).
+        header: the reply's fields as ints (pitch in bytes, width, height, format = the
+        D3DFORMAT word: texture format, endian, tiled and swizzle; framebuffersize; sw, sh =
+        the display size); data: framebuffersize raw bytes, still tiled if the format says so.
+        Checked on the console (17559 xbdm.xex): 203, one header line, then the bytes."""
+        self.s.sendall(b"screenshot\r\n")
+        st = self.f.readline().decode(errors="replace").strip()
+        if not st.startswith("203"):
+            raise SystemExit(f"screenshot: {st}")
+        line = self.f.readline().decode(errors="replace")
+        hdr = {}
+        for kv in line.replace(",", " ").split():
+            k, _, v = kv.partition("=")
+            try:
+                hdr[k] = int(v, 0)
+            except ValueError:
+                pass
+        n = hdr.get("framebuffersize", 0)
+        data = self.f.read(n)
+        if len(data) != n:
+            raise OSError(f"screenshot: {len(data)} of {n} bytes")
+        return hdr, data
+
+
+def xw_slot(name):
+    """xw.xex -> 0, xw3.xex -> 3, anything else -> None"""
+    n = name.lower()
+    if not (n.startswith("xw") and n.endswith(".xex")) or not (n[2:-4].isdigit() or n == "xw.xex"):
+        return None
+    return int(n[2:-4] or 0)
+
+
+def scan_block(x, base, size, magic, check=None):
+    """address of a 4-byte magic (bytes) at a word boundary in a loaded module's memory, read
+    over xbdm page by page; check(address) may reject a candidate. None if it isn't there."""
+    for off in range(0, size, 0x1000):
+        page = x.mem(base + off, min(0x1000, size - off))
+        if not page:
+            continue
+        at = page.find(magic)
+        while at >= 0:
+            if at % 4 == 0 and (check is None or check(base + off + at)):
+                return base + off + at
+            at = page.find(magic, at + 1)
+    return None
+
+
+def scan_blocks(x, base, size, checks):
+    """{magic: address} for each magic (an int) in checks whose block is in a loaded module's
+    memory, in one pass page by page; checks[magic](address) may reject a candidate."""
+    tags = {struct.pack(">I", m): m for m in checks}
+    out = {}
+    for off in range(0, size, 0x1000):
+        if len(out) == len(tags):
+            break
+        n = min(0x1000, size - off)
+        page = x.mem(base + off, n) or x.mem(base + off, n)  # once more: a busy console
+        if not page:
+            continue
+        for tag, m in tags.items():
+            at = page.find(tag)
+            while m not in out and at >= 0:
+                if at % 4 == 0 and (checks[m] is None or checks[m](base + off + at)):
+                    out[m] = base + off + at
+                at = page.find(tag, at + 1)
+    return out
+
+
+def xw_running(mods):
+    """the name (no extension) of the xw build that is running among the loaded modules: the
+    one a hot reload loaded last (out/xw_loaded_name) if it is still loaded, else xw.xex"""
+    name = name_file("xw_loaded_name", "")
+    if name and name + ".xex" in mods:
+        return name
+    if "xw.xex" in mods:
+        return "xw"
+    slots = sorted(s for s in (xw_slot(m) for m in mods) if s is not None)
+    return f"xw{slots[-1]}" if slots else None
+
+
+def xw_block(magic):
+    """Address of the status block with this magic (an int, as in the C source) in the xw build
+    that is running. Normally straight from that build's PE in out/; if the console doesn't
+    have the magic there (out/ was rebuilt since the build was loaded), the module's memory
+    is searched instead."""
+    tag = struct.pack(">I", magic)
+    x = Xbdm()
+    mods = x.module_map()
+    name = xw_running(mods)
+    if not name:
+        raise SystemExit("no xw build is loaded on the console")
+    path = os.path.join(OUT, name + ".exe")
+    if os.path.exists(path):
+        try:
+            addr = pe_va(path, tag)
+            w = x.u32s(addr, 1)
+            if w and w[0] == magic:
+                return addr
+        except SystemExit:
+            pass
+    addr = scan_block(x, *mods[name + ".xex"], tag)
+    if addr is None:
+        raise SystemExit(f"no {tag.decode(errors='replace')} block in {name}.xex on the console "
+                         f"(an older build?)")
+    return addr
+
 
 LAUNCH_INI = "Usb0:" + B + "launch.ini"
 BOOT_PATH = "Usb:" + B + "Apps" + B + "xadapter" + B + "xa.xex"
 
 
-def boot(on):
+def boot(on, boot_path=None):
     """add (or remove) the plugin as a launch.ini boot plugin, in the first free pluginN slot;
     the original is backed up next to it and in out/ first"""
+    BOOT_PATH_ = boot_path or BOOT_PATH
     old = Xbdm().getfile(LAUNCH_INI)
     lines = old.decode("latin-1").split("\n")
     ours = [i for i, l in enumerate(lines)
-            if l.strip().lower().startswith("plugin") and l.split("=", 1)[-1].strip().lower() == BOOT_PATH.lower()]
+            if l.strip().lower().startswith("plugin") and l.split("=", 1)[-1].strip().lower() == BOOT_PATH_.lower()]
     if on and ours:
         print(f"already a boot plugin: {lines[ours[0]].strip()}")
         return
@@ -130,7 +269,7 @@ def boot(on):
         if not free:
             raise SystemExit("no free pluginN slot in launch.ini")
         key = lines[free[0]].split("=", 1)[0]
-        lines[free[0]] = f"{key}= {BOOT_PATH}" + ("\r" if lines[free[0]].endswith("\r") else "")
+        lines[free[0]] = f"{key}= {BOOT_PATH_}" + ("\r" if lines[free[0]].endswith("\r") else "")
     else:
         for i in ours:
             key = lines[i].split("=", 1)[0]
@@ -362,4 +501,5 @@ def main():
         raise SystemExit(__doc__)
 
 
-main()
+if __name__ == "__main__":
+    main()
