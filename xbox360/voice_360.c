@@ -47,6 +47,7 @@
 
 #include "../core/gip.h" /* GIP_VOL_*: the headset's own volume settings */
 #include "../core/platform.h"
+#include "bridge_360.h"
 #include "detour.h"
 #include "eq_360.h"
 #include "diag_360.h"
@@ -1246,8 +1247,6 @@ void xv_resume(void)
 	xa_log("voice: resumed\n");
 }
 
-static const u8 g_silence[64]; /* -fno-zero-initialized-in-bss keeps it in .data */
-
 /* ---- the 360-rate capture path ------------------------------------------------------------- */
 
 /* voice_priv.h: MIC-AUTO's decimator delivers the mic here, already at the capture rate */
@@ -1273,7 +1272,8 @@ void xv_mic_samples(int pad, const u8 *data, int len)
 	 * consumer in turn; a mic packet is 1 ms (24 frames at 24 kHz): one chunk */
 	for (int frames = len / (int)(2 * p->ch_in); frames > 0;) {
 		int n = frames < XD_CHUNK ? frames : XD_CHUNK;
-		u8 mono[2 * XD_CHUNK];
+		u8 mono[2 * XD_CHUNK], shaped[2 * XD_CHUNK];
+		bool to360, pc, muted, game;
 
 		mic_clean(pad, data, n, p->ch_in, mono);
 		data += n * 2 * (int)p->ch_in;
@@ -1282,15 +1282,28 @@ void xv_mic_samples(int pad, const u8 *data, int len)
 		st_mic(pad, mono, n, 1);                    /* software sidetone */
 		xt_mic(pad, mono, 2 * n, p->rate_in, 1, xd_gate_open(pad)); /* team voice */
 		mt_record(pad, mono, n);                    /* the mic test */
-		if (g_xv.applied_stage < 4 || !p->serving || g_xv.loopback)
+		to360 = g_xv.applied_stage >= 4 && p->serving && !g_xv.loopback;
+		pc = xb_mic_wanted();
+		if (!to360 && !pc)
 			continue;
-		p->last_mic_ms = xa_now_ms();
-		if (g_mic_mute[pad] || !xt_mic_to_game())
+		if (to360)
+			p->last_mic_ms = xa_now_ms();
+		muted = g_mic_mute[pad];
+		game = !muted && to360 && xt_mic_to_game(); /* (MIC TO TEAM: the 360 gets none) */
+		if (!muted && (game || pc))
+			mic_shape(pad, mono, n, shaped);        /* MIC VOLUME, gate, limiter */
+		else
+			memset(shaped, 0, (size_t)(2 * n));
+		if (pc)
+			xb_mic(pad, shaped, n, p->rate_in);     /* PC bridge: the headset mic, alone */
+		if (!to360)
+			continue;
+		if (!game)
 			/* muted (or MIC TO TEAM): the same amount of silence, so capture packets
 			 * keep completing on time */
-			mic_to_360(pad, g_silence, n);
-		else
-			mic_shaped(pad, mono, n);
+			memset(shaped, 0, (size_t)(2 * n));
+		xb_mix_chat(pad, shaped, n, p->rate_in);    /* PC bridge: the PC's voices */
+		mic_to_360(pad, shaped, n);
 	}
 }
 
@@ -1314,6 +1327,8 @@ void xv_earpiece_fill(int pad, u8 *out, int len)
 		/* loopback before the mix: the 360 gets back what it sent, not our sidetone */
 		if (g_xv.loopback)
 			loop_feed(pad, out, len);
+		/* PC bridge: the Xbox players as the 360 sends them, before any of our gains */
+		xb_players(pad, out, len, p->rate_out, p->ch_out);
 	}
 	if (hs_format_ok(p)) {
 		/* after the loopback: the 360 gets back what it sent, never the game or our gains.
@@ -1323,6 +1338,7 @@ void xv_earpiece_fill(int pad, u8 *out, int len)
 		xg_hold(tone_active(pad)); /* the test tone takes game audio's place */
 		xg_mix(pad, out, len, p->rate_out, p->ch_out);
 		xt_mix(pad, out, len, p->rate_out, p->ch_out, xg_chat_gain() * xt_level() / 10);
+		xb_mix_headset(pad, out, len, p->rate_out, p->ch_out, xg_master_gain()); /* PC bridge */
 		tone_mix(pad, out, len, xg_master_gain());
 		st_mix(pad, out, len, xg_master_gain());
 		tick_mix(pad, out, len, xg_master_gain());

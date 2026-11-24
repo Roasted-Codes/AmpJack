@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /* Host test of the mic path as built: the real xbox360/micdsp_360.c (XV_HOST_TEST), fed the
- * way voice_360.c's xv_mic_samples feeds it (mic_clean, mic_analyse, then mic_shaped, or
+ * way voice_360.c's xv_mic_samples feeds it (mic_clean, mic_analyse, then mic_shape + mic_to_360, or
  * silence through mic_to_360 while muted), with the capture side (mic_feed's rs_push,
  * xv_cap_feed) hashed instead of packed.
  *
@@ -168,10 +168,14 @@ static bool chunk(const s16 *x, int n)
 	mic_analyse(0, mono, n);
 	for (int i = 0; i < n; i++)
 		g_clean_hash = fnv(g_clean_hash, get_le16(mono + 2 * i));
-	if (g_mic_mute[0])
+	if (g_mic_mute[0]) {
 		mic_to_360(0, g_zero, n);
-	else
-		mic_shaped(0, mono, n);
+	} else {
+		u8 shaped[2 * XD_CHUNK];
+
+		mic_shape(0, mono, n, shaped);
+		mic_to_360(0, shaped, n);
+	}
 	if (w == g_windows)
 		return false;
 	/* what XWDG shows of the mic after the window */

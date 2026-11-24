@@ -39,12 +39,6 @@
 #include "voice_360.h" /* xv_mic_muted */
 #endif
 
-/* build.sh (WP0.1's) compiles one team file, team_360.c, when it exists; net_360.c is part of
- * this unit until build.sh lists it (then drop this line: XW_TEAM="team_360.c net_360.c") */
-#ifndef XT_HOST_TEST
-#include "net_360.c"
-#endif
-
 #ifndef XT_HOST_TEST
 #define BARRIER() __asm__ __volatile__("lwsync" ::: "memory")
 #else

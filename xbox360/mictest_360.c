@@ -281,7 +281,7 @@ void mt_record(int pad, const u8 *d, int frames)
 }
 
 /* the clip's next MT_GCHUNK samples through the gate, MIC VOLUME and the limiter in effect
- * now, in mic_analyse's then mic_shaped's order (voice_priv.h); 0 at the clip's end.
+ * now, in mic_analyse's then mic_shape's order (voice_priv.h); 0 at the clip's end.
  * rec_shut counts the samples the gate shut in this playback; rec_gain / rec_gate are the
  * volume and gate it is played with. */
 static u32 mt_gate_chunk(void)

@@ -38,6 +38,7 @@
 #include "hud_360.h"
 #include "panel_360.h"
 #include "team_360.h"
+#include "bridge_360.h"
 #include "handover.h"
 #include "eq_360.h"
 #include "file_360.h"
@@ -2194,6 +2195,7 @@ BODY u32 XwThreadC(void *context)
 	panel_init();
 	hud_init();
 	xt_init();
+	xb_init();
 	xf_init();
 	xq_init();
 	xs_init();
@@ -2293,6 +2295,7 @@ BODY u32 XwThreadC(void *context)
 		hud_poll();
 		win_check();
 		xt_poll();
+		xb_poll();
 		xq_poll();
 		xs_poll();
 		ho_title();

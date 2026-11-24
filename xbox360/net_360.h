@@ -18,7 +18,7 @@
  * SO_REUSEADDR and SO_BROADCAST.
  *
  * Calls here block for no longer than XAM does (the sockets are non-blocking): never from a
- * DPC or the driver thread; team_360.c's net thread only.
+ * DPC or the driver thread; team_360.c's and bridge_360.c's net threads only.
  *
  * Every function returns 0 or the raw error: the NetDll return code where it is one
  * (startup), else WSAGetLastError() (a WSA code, e.g. 10035 WSAEWOULDBLOCK).
@@ -55,10 +55,17 @@ int xn_init(void);
 /* the address the failed check was about (an export's address, or the ordinal), for status */
 u32 xn_init_detail(void);
 
-/* starts the system caller's XNet and/or WSA layer (mode: XN_START_* bits); *xnet and *wsa
- * get each call's raw return (0 = ok; untouched if not called). Returns 0 if everything that
- * was asked for started. Balanced by xn_cleanup, which undoes exactly what succeeded. */
-u32 xn_startup(u32 mode, u32 *xnet, u32 *wsa);
+/* starts the system caller's XNet and/or WSA layer (mode: XN_START_* bits) for one user;
+ * *xnet and *wsa get each call's raw return (0 = ok, also when another user had started it;
+ * untouched if not called). Returns 0 if everything that was asked for started. Balanced by
+ * xn_cleanup_as, which undoes what this user started unless another user still holds it (so
+ * team voice closing never stops the bridge's socket, and the other way round). */
+#define XN_USER_TEAM 0      /* team_360.c (xn_startup / xn_cleanup) */
+#define XN_USER_BRIDGE 1    /* bridge_360.c */
+#define XN_USERS 2
+u32 xn_startup_as(u32 user, u32 mode, u32 *xnet, u32 *wsa);
+void xn_cleanup_as(u32 user);
+u32 xn_startup(u32 mode, u32 *xnet, u32 *wsa); /* as XN_USER_TEAM */
 void xn_cleanup(void);
 
 /* a non-blocking UDP socket bound to INADDR_ANY:port (host order), with the XN_OPT_* options

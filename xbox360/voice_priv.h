@@ -13,7 +13,8 @@
  * The order of the earpiece mix and of the mic chain is frozen (docs/ROADMAP.md 2.4): it is
  * written out in xv_earpiece_fill and xv_mic_samples, the only places that call across these
  * files on the audio path. A feature adds its stage at the call site prepared for it there
- * (xq_process; mic_to_360 in micdsp_360.c for the decimator), not inside another file.
+ * (xq_process; mic_to_360 in micdsp_360.c for the decimator; the PC bridge's xb_* calls), not
+ * inside another file.
  *
  * The helpers below are `static` in this header, as they were in the one file they came
  * from, so each file inlines them exactly as before (see dsp_360.h for why not `inline`).
@@ -77,7 +78,7 @@ extern u8 g_mic_mute[PADS]; /* side_360.c: the Share button's mic mute */
 #define XD_GATE_ATTACK_DIV 500
 #define XD_Q12 4096         /* the mic's volume in effect: Q12 (4096 = 100 %, <= 22937) */
 #define XD_LIMIT 29204      /* the mic's peak limiter: -1 dBFS */
-#define XD_CHUNK 32         /* mic frames handled at a time (g_silence holds 32 mono) */
+#define XD_CHUNK 32         /* mic frames handled at a time */
 
 /* the mic on its way out (the 360's, the mic test's recording): zero = a fresh state, which
  * fades in over 10 ms. gain: MIC VOLUME in effect, Q12, ramping; shut: how far the gate is
@@ -300,7 +301,8 @@ void mic_analyse(int pad, const u8 *d, int frames);
 /* the noise gate's threshold in effect now for pad slot `pad` (RMS, 0 = gate off): the
  * step's, or NOISE GATE AUTO's of the moment for that pad */
 u32 mic_gate_threshold(int pad);
-void mic_shaped(int pad, const u8 *d, int frames);
+/* MIC VOLUME, the gate and the limiter: frames (<= XD_CHUNK) of mono s16le into out */
+void mic_shape(int pad, const u8 *d, int frames, u8 *out);
 /* the capture path's decimator hook: shaped mic, or silence while muted (mono s16le) */
 void mic_to_360(int pad, const u8 *d, int frames);
 

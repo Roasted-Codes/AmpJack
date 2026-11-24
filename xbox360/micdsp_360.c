@@ -495,21 +495,20 @@ void mic_to_360(int pad, const u8 *d, int frames)
 	}
 }
 
-/* the mic on its way to the 360 (mono s16le, after mic_clean): MIC VOLUME, the gate
- * (decided by mic_analyse) and the limiter */
-void mic_shaped(int pad, const u8 *d, int frames)
+/* the mic on its way out (mono s16le, after mic_clean): MIC VOLUME, the gate (decided by
+ * mic_analyse) and the limiter, into out (frames <= XD_CHUNK). xv_mic_samples hands the result
+ * to the 360 (mic_to_360) and to the PC bridge. */
+void mic_shape(int pad, const u8 *d, int frames, u8 *out)
 {
 	struct xv_pad *p = &g_pad[pad];
 	struct xd_mic *m = &g_dmic[pad];
 	u32 gain_to = mic_gain_target(pad), shut_to = gate_shut(m) ? 32768 : 0;
-	u8 tmp[2 * XD_CHUNK];
 
 	if (frames > XD_CHUNK)
 		frames = XD_CHUNK;
 	for (int i = 0; i < frames; i++)
-		put_le16(tmp + 2 * i,
+		put_le16(out + 2 * i,
 			 (u16)shape(&m->sh, (s16)get_le16(d + 2 * i), gain_to, shut_to, p->rate_in));
-	mic_to_360(pad, tmp, frames);
 	g_xd.mic_gain_q15 = m->sh.gain * (32768 / XD_Q12);
 }
 

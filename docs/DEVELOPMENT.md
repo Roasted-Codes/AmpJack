@@ -28,7 +28,7 @@ Never build with `-g`: the toolchain's clang crashes emitting DWARF into COFF.
 | Switch | Effect |
 |---|---|
 | `XW_DEV=1` | Development build: compiles with `-DXW_DEV`. Probes, traces, dummy loads, dump buffers, alternative modes and verbose logs belong behind `#ifdef XW_DEV`; the release build (the default) leaves them out. Diagnostics are never deleted, only fenced, so future work can switch them back on. Console sessions that run the acceptance suite use `XW_DEV=1`. |
-| `XW_TEAM=1` | Links the real console-to-console team voice (`team_360.c`, which includes `net_360.c`). The default links `team_360_stub.c`: team voice is not verified on two consoles, so it is not published. The source, `tests/test_team*.c` and `team.py` stay. |
+| `XW_TEAM=1` | Links the real console-to-console team voice (`team_360.c`; `net_360.c`, its UDP layer, is always linked: the PC bridge uses it too). The default links `team_360_stub.c`: team voice is not verified on two consoles, so it is not published. The source, `tests/test_team*.c` and `team.py` stay. |
 
 For example `XW_DEV=1 XW_TEAM=1 bash toolchain/build.sh`. The build prints which team source
 and flags it used (`xw.xex: team voice ..., release`).
@@ -70,6 +70,8 @@ file back to check it, then `magicboot cold`; `--no-reboot` stops after the chec
 | `panel_360.c`, `hud_360.c`, `hud_panel.c` | The Share panel: gestures and rows, the swap hook and draw thread, the drawing | driver thread / draw thread |
 | `xinput_360.c`, `detour.c`, `platform_360.c` | XInput hooks and the XAM thread; the detour slots; Usbd calls, logging, allocation | |
 | `eq_360.c`, `settings_360.c`, `file_360.c`, `surround_360.c` | Feature modules (stubs until their package lands); called from `xv_earpiece_fill` (`xq_process`) and the driver thread (`xf_init`, `xq_init`, `xs_init` at start; `xq_poll`, `xs_poll` every pass; `*_quiesce` / `*_resume` in hot reload) | |
+| `bridge_360.c`, `bridge_dsp.h` | The PC bridge (XWBR, `bridge.py`; PC side `tools/bridge/`): its net thread, and the jitter buffers / send rings / mix the audio calls use (`xb_*` in `xv_mic_samples` and `xv_earpiece_fill`; `tests/test_bridge.c`) | net thread (hardware thread 5) / driver thread |
+| `net_360.c` | UDP as XAM's system caller, for the bridge and team voice (per-user startup counts) | net threads |
 | `kernel_360.h`, `dsp_360.h` | Shared helpers: `BARRIER`, `HOOK` / `BODY`, `struct sig`, the NV64 thunk macro; `clamp16`, `isin`, `isqrt`. Add to these instead of copying a helper | |
 
 ## Testing the core on Linux

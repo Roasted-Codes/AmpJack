@@ -208,7 +208,7 @@ static void fill_clip(void)
 
 /* the clip as the playback must hear it: the live mic path's steps (voice_priv.h gate_*, then
  * shape()) 1 ms at a time, the gate starting shut, at the threshold and volume the fakes
- * give (g_thr, g_gain); the order mic_analyse / mic_shaped use them in */
+ * give (g_thr, g_gain); the order mic_analyse / mic_shape use them in */
 static void gated(s16 *y)
 {
 	struct xd_mic m;

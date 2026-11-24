@@ -14,7 +14,7 @@
 # Switches for xw.xex (environment; docs/DEVELOPMENT.md):
 #   XW_DEV=1   development build: -DXW_DEV (probes, traces, dummy loads, verbose logs).
 #              Default 0, the release build.
-#   XW_TEAM=1  link the real team voice (team_360.c + net_360.c). Default 0: the stub, because
+#   XW_TEAM=1  link the real team voice (team_360.c). Default 0: the stub, because
 #              team voice is not verified on two consoles and is not published.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -77,7 +77,7 @@ XW_HUD=hud_360_stub.c
 # console-to-console team voice (team_360.h): the stub unless XW_TEAM=1 (see the top)
 case "${XW_TEAM:-0}" in
     0) XW_TEAM_SRC=team_360_stub.c ;;
-    1) XW_TEAM_SRC=team_360.c ;; # includes net_360.c
+    1) XW_TEAM_SRC=team_360.c ;;
     *) echo "XW_TEAM: 0 (stub, default) or 1"; exit 1 ;;
 esac
 case "${XW_DEV:-0}" in
@@ -91,9 +91,11 @@ esac
 # one plugin for both would add xa_plugin.c's adapter match, firmware load and dongle ops here,
 # sharing xinput_360.c's 4 slots. Never load xw.xex and xa.xex together (same XInput hooks).
 # reload_360.c and selftest_360.c are always listed: their contents are #ifdef XW_DEV.
+# net_360.c (UDP as XAM's system caller) serves the PC bridge (bridge_360.c) and team voice.
 XW_SRC="xw_plugin.c reload_360.c selftest_360.c platform_360.c xinput_360.c rumble_360.c
     voice_360.c side_360.c micdsp_360.c mictest_360.c game_360.c panel_360.c hud_panel.c
-    $XW_HUD $XW_TEAM_SRC eq_360.c surround_360.c settings_360.c file_360.c detour.c"
+    $XW_HUD $XW_TEAM_SRC eq_360.c surround_360.c settings_360.c file_360.c detour.c
+    net_360.c bridge_360.c"
 echo "xw.xex: team voice $XW_TEAM_SRC, ${XW_FLAGS:-release}"
 $TC/bin/clang -O2 -Wall -Wno-unused-parameter $CFLAGS_DLL $ECC_FLAGS $DLL_LINK,/base:$XW_BASE \
     -DXA_NAME="\"xw.xex\"" -DXA_WIRED=1 -DXA_HOOK_STATS=1 ${XW_STAGED:+-DXW_STAGED=1} $XW_FLAGS \

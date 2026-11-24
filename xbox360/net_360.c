@@ -114,7 +114,9 @@ static const struct xn_export EXPORTS[] = {
 
 static int g_init = -1;       /* xn_init's result, once */
 static u32 g_init_detail;
-static u32 g_started;         /* XN_START_* that succeeded (xn_cleanup undoes them) */
+static u32 g_started;         /* XN_START_* that succeeded (undone when no user holds them) */
+static u32 g_held[XN_USERS];  /* per user (team voice, the PC bridge): the layers it asked for */
+static volatile u32 g_lock;   /* startup / cleanup: two net threads may call them */
 static u8 g_wsadata[400] __attribute__((aligned(8))); /* WSADATA: XAM writes up to +0x18F */
 
 /* XNetStartupParams as HaloLAN passes them: size 13, XNET_STARTUP_BYPASS_SECURITY, default
@@ -172,42 +174,87 @@ static u32 last_error(void)
 	return e ? (u32)e : 0xFFFFFFFFu; /* failed without an error code: still a failure */
 }
 
-u32 xn_startup(u32 mode, u32 *xnet, u32 *wsa)
+/* startup and cleanup run on the users' own net threads, rarely (an open, a close): a spin on
+ * one word with a 1 ms sleep, never held across anything but the XAM calls themselves */
+static void net_lock(void)
+{
+	while (!__sync_bool_compare_and_swap(&g_lock, 0, 1))
+		xa_sleep_ms(1);
+}
+
+static void net_unlock(void)
+{
+	__asm__ __volatile__("sync" ::: "memory");
+	g_lock = 0;
+}
+
+u32 xn_startup_as(u32 user, u32 mode, u32 *xnet, u32 *wsa)
 {
 	u32 err = 0;
 
 	if (g_init)
 		return XN_ENOTINIT;
-	if ((mode & XN_START_XNET) && !(g_started & XN_START_XNET)) {
-		int r = pXNetStartup(CALLER_SYSAPP, XNET_PARAMS);
+	if (user >= XN_USERS)
+		return XN_ENOTINIT;
+	net_lock();
+	if ((mode & XN_START_XNET) && !(g_held[user] & XN_START_XNET)) {
+		int r = 0;
 
+		if (!(g_started & XN_START_XNET))
+			r = pXNetStartup(CALLER_SYSAPP, XNET_PARAMS);
 		*xnet = (u32)r;
-		if (r == 0)
+		if (r == 0) {
 			g_started |= XN_START_XNET;
-		else
+			g_held[user] |= XN_START_XNET;
+		} else {
 			err = (u32)r;
+		}
 	}
-	if ((mode & XN_START_WSA) && !(g_started & XN_START_WSA)) {
-		int r = pWSAStartup(CALLER_SYSAPP, 0x0202, g_wsadata);
+	if ((mode & XN_START_WSA) && !(g_held[user] & XN_START_WSA)) {
+		int r = 0;
 
+		if (!(g_started & XN_START_WSA))
+			r = pWSAStartup(CALLER_SYSAPP, 0x0202, g_wsadata);
 		*wsa = (u32)r;
-		if (r == 0)
+		if (r == 0) {
 			g_started |= XN_START_WSA;
-		else if (!err)
+			g_held[user] |= XN_START_WSA;
+		} else if (!err) {
 			err = (u32)r;
+		}
 	}
+	net_unlock();
 	return err;
+}
+
+void xn_cleanup_as(u32 user)
+{
+	u32 others = 0, drop;
+
+	if (g_init || user >= XN_USERS)
+		return;
+	net_lock();
+	for (u32 u = 0; u < XN_USERS; u++)
+		if (u != user)
+			others |= g_held[u];
+	drop = g_held[user] & ~others & g_started;
+	g_held[user] = 0;
+	if (drop & XN_START_WSA)
+		pWSACleanup(CALLER_SYSAPP);
+	if (drop & XN_START_XNET)
+		pXNetCleanup(CALLER_SYSAPP);
+	g_started &= ~drop;
+	net_unlock();
+}
+
+u32 xn_startup(u32 mode, u32 *xnet, u32 *wsa)
+{
+	return xn_startup_as(XN_USER_TEAM, mode, xnet, wsa);
 }
 
 void xn_cleanup(void)
 {
-	if (g_init)
-		return;
-	if (g_started & XN_START_WSA)
-		pWSACleanup(CALLER_SYSAPP);
-	if (g_started & XN_START_XNET)
-		pXNetCleanup(CALLER_SYSAPP);
-	g_started = 0;
+	xn_cleanup_as(XN_USER_TEAM);
 }
 
 static int set_int(u32 s, int name, u32 value)

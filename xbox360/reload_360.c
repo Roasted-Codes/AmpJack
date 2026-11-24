@@ -17,6 +17,7 @@
 #include "hud_360.h"
 #include "settings_360.h"
 #include "team_360.h"
+#include "bridge_360.h"
 #include "voice_360.h"
 #include "xinput_360.h"
 #include "xw_priv.h"
@@ -288,6 +289,7 @@ static void release_resume(void)
 	xq_resume();
 	xs_resume();
 	xt_resume();
+	xb_resume();
 	hud_resume();
 	xv_resume();
 	xg_resume();
@@ -397,6 +399,7 @@ void do_release(u32 cmd)
 	xv_quiesce();
 	hud_quiesce();
 	xt_quiesce();
+	xb_quiesce();
 	xs_quiesce();
 	xq_quiesce();
 	xf_quiesce();
