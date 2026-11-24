@@ -20,7 +20,7 @@ in its jack. The SCUF Instinct Pro (`2e95:0504`) is verified with the Mac test t
 
 No computer is needed once the file is on the console.
 
-1. Download `xw.xex` from the [latest release](https://github.com/Roasted-Codes/Xbox360-GIP-Wired/releases/latest)
+1. Download `xw.xex` from the [latest release](https://github.com/Roasted-Codes/AmpJack/releases/latest)
    (or build it: `bash toolchain/build.sh`).
 2. Copy it to the 360's hard drive, e.g. `Hdd:\Plugins\xw.xex` (USB stick + Aurora's file
    manager, or FTP).

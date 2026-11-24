@@ -11,7 +11,7 @@ merged.
 
 # Part 1: the plan
 
-Repo: `/Users/owner/Documents/code/Xbox360-GIP-Wired`, read on `auto-quiet` (HEAD 1484ad3). Nothing was modified and the console was not touched. Everything below is from reading the code; nothing was measured. CPU estimates are mine and unverified.
+Repo: `/Users/owner/Documents/code/AmpJack`, read on `auto-quiet` (HEAD 1484ad3). Nothing was modified and the console was not touched. Everything below is from reading the code; nothing was measured. CPU estimates are mine and unverified.
 
 ## 0. Facts that shape the plan
 
@@ -512,11 +512,11 @@ Cut order, first to last:
 | Hot reload fix (PLAN Phase 3) | Would not pay for itself in this block. This plan needs about 5 reboots, and the owner has to be present to listen in every session anyway. PLAN's own E1-E7 experiments each risk a freeze plus reboot, and the first reload with headset audio froze the console. Do it after S4 as its own block. Until then every new module ships quiesce / resume so it does not get harder. |
 
 ### Critical Files for Implementation
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/voice_360.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/hud_360.h
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/game_360.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/panel_360.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/hud_panel.c
+- /Users/owner/Documents/code/AmpJack/xbox360/voice_360.c
+- /Users/owner/Documents/code/AmpJack/xbox360/hud_360.h
+- /Users/owner/Documents/code/AmpJack/xbox360/game_360.c
+- /Users/owner/Documents/code/AmpJack/xbox360/panel_360.c
+- /Users/owner/Documents/code/AmpJack/xbox360/hud_panel.c
 
 ---
 
@@ -677,11 +677,11 @@ Plain-language line for the owner: "how big it is, how much memory it takes, how
 - Cut list addition: Q3 items 5 and 6 are cut before any feature is.
 
 ### Critical Files for Implementation
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/voice_360.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/xw_plugin.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/hud_360.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/build.sh
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/diag_360.h
+- /Users/owner/Documents/code/AmpJack/xbox360/voice_360.c
+- /Users/owner/Documents/code/AmpJack/xbox360/xw_plugin.c
+- /Users/owner/Documents/code/AmpJack/xbox360/hud_360.c
+- /Users/owner/Documents/code/AmpJack/xbox360/build.sh
+- /Users/owner/Documents/code/AmpJack/xbox360/diag_360.h
 
 ---
 

@@ -13,13 +13,13 @@ non-technical friends. "Idiot proof" is the design rule.
 
 ## 2. Where everything is
 
-- GitHub (private): `git@github.com:Roasted-Codes/Xbox360-GIP-Wired.git`, one branch: **`main`**
+- GitHub (private): `git@github.com:Roasted-Codes/AmpJack.git`, one branch: **`main`**
   (tag `beta-1` = the state described here). On the owner's Mac the repo is
-  `/Users/owner/Documents/code/Xbox360-GIP-Wired`; there the GitHub remote is called `private`
+  `/Users/owner/Documents/code/AmpJack`; there the GitHub remote is called `private`
   and `origin` is the upstream project (Jacckii): never push to upstream.
 - The development history had about 40 feature / experiment branches. They were merged or
   dropped on Nov 23 2026; a full backup of every branch is on the owner's Mac at
-  `/Users/owner/Documents/code/_archive/Xbox360-GIP-Wired-all-branches-2026-11-23.bundle`
+  `/Users/owner/Documents/code/_archive/AmpJack-all-branches-2026-11-23.bundle`
   (`git clone` it to look). Older docs mention branch names like `headset-audio`, `sidetone`,
   `mictest`: all of that is in `main` now.
 - Not in git (ignored): `xbox360/out/` builds and console logs; rebuild with the toolchain.

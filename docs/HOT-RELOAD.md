@@ -425,7 +425,7 @@ the owner pressing the pad's Xbox button.
 **Every session.**
 
 ```bash
-cd /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360
+cd /Users/owner/Documents/code/AmpJack/xbox360
 export XBOX=10.0.0.13 XW_DIR='Hdd:\Plugins'
 python3 xw.py tee            # in its own terminal, the whole session; log in out/logs/
 python3 xw.py hooks          # expect: 7 ours, 1 original, 0 foreign (exit 0)
@@ -660,7 +660,7 @@ Known unknowns, most important first (none of these is checked on the console ye
 Console at the Aurora dashboard, pad and headset plugged in.
 
 ```bash
-cd /Users/owner/Documents/code/Xbox360-GIP-Wired
+cd /Users/owner/Documents/code/AmpJack
 bash toolchain/build.sh                       # must end with: out/xw.xex ... ok, no FP
 cd xbox360
 export XBOX=10.0.0.13 XW_DIR='Hdd:\Plugins'

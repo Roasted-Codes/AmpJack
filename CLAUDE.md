@@ -1,4 +1,4 @@
-# AmpJack (repo folder: Xbox360-GIP-Wired)
+# AmpJack
 
 A plugin (`xw.xex`) for a modded Xbox 360 (RGH, kernel 17559) that makes **wired** Xbox One /
 Series controllers work, and turns a headset in the controller's jack into a MixAmp

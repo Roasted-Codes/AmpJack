@@ -3,7 +3,7 @@ name: run-xbox360-gip-wired
 description: Build, install, boot, run, drive, screenshot and test the xw.xex plugin on the real Xbox 360 over xbdm. Use to try a new build safely, open the Share panel without hands, take a screenshot of the console, check the audio loop for stalls, or run the host tests.
 ---
 
-# Run Xbox360-GIP-Wired
+# Run AmpJack
 
 `xw.xex` is a kernel plugin that only runs on the modded Xbox 360 at `10.0.0.13` (xbdm port
 730). There is no emulator: "running it" means building in Docker on the Mac, copying it to
@@ -69,7 +69,7 @@ Never install an untested build and walk away: a build that freezes at boot stay
 and freezes every boot. Get the last published build as the fallback, then:
 
 ```bash
-gh release download wired-v3 -R Roasted-Codes/Xbox360-GIP-Wired -D /tmp/v3 --clobber
+gh release download v1 -R Roasted-Codes/AmpJack -p xw.xex -D /tmp/v3 --clobber
 python3 $D boottest /tmp/v3/xw.xex
 ```
 

@@ -1,6 +1,6 @@
 # PLAN: MixAmp replacement on the Xbox 360 (xw.xex)
 
-Repo `/Users/owner/Documents/code/Xbox360-GIP-Wired`, branch `headset-audio` (HEAD 5eabd0a). This is a plan only: nothing was edited and nothing was run on the console.
+Repo `/Users/owner/Documents/code/AmpJack`, branch `headset-audio` (HEAD 5eabd0a). This is a plan only: nothing was edited and nothing was run on the console.
 
 Four items are flagged before the plan itself, because they change the order of work:
 
@@ -669,8 +669,8 @@ WP1.3 ─> WP2.1 SCUF (C or E)
 | Status-block layout drift between C and Python | Version fields and asserts; tools refuse unknown versions |
 
 ### Critical Files for Implementation
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/xw_plugin.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/hud_360.h (and `hud_360.c` from commit 4266a69 on branch `hs-hud`)
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/voice_360.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/detour.c
-- /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/xw.py (with `handover.h` for Phase 3)
+- /Users/owner/Documents/code/AmpJack/xbox360/xw_plugin.c
+- /Users/owner/Documents/code/AmpJack/xbox360/hud_360.h (and `hud_360.c` from commit 4266a69 on branch `hs-hud`)
+- /Users/owner/Documents/code/AmpJack/xbox360/voice_360.c
+- /Users/owner/Documents/code/AmpJack/xbox360/detour.c
+- /Users/owner/Documents/code/AmpJack/xbox360/xw.py (with `handover.h` for Phase 3)

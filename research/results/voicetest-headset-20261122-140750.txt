@@ -54,7 +54,7 @@ first64=3b00350044003d00390039003f0039003a00370039003e0039003a00390036003e003700
 raw_write=00000000
 raw_bytes=32000
 end
-raw capture: /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/out/voicetest_8000.raw (32000 bytes, s16le mono 8000 Hz)
+raw capture: /Users/owner/Documents/code/AmpJack/xbox360/out/voicetest_8000.raw (32000 bytes, s16le mono 8000 Hz)
 plugin pad 0: capture done +450 render done +500 mic dropped +35512 underrun +40640 cancelled +8
 --- rate 16000 Hz, s16le: ini 200- OK
 launch 200- OK
@@ -108,7 +108,7 @@ first64=360034003400350038003700380039003800390037003400360035002f0035003a003b00
 raw_write=00000000
 raw_bytes=64000
 end
-raw capture: /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/out/voicetest_16000.raw (64000 bytes, s16le mono 16000 Hz)
+raw capture: /Users/owner/Documents/code/AmpJack/xbox360/out/voicetest_16000.raw (64000 bytes, s16le mono 16000 Hz)
 plugin pad 0: capture done +459 render done +500 mic dropped +70448 underrun +81664 cancelled +8
 --- rate 24000 Hz, s16le: ini 200- OK
 launch 200- OK
@@ -162,7 +162,7 @@ first64=55003d003b003e003e003f003d003d004200430040003f0041003d003c003d0039003b00
 raw_write=00000000
 raw_bytes=96000
 end
-raw capture: /Users/owner/Documents/code/Xbox360-GIP-Wired/xbox360/out/voicetest_24000.raw (96000 bytes, s16le mono 24000 Hz)
+raw capture: /Users/owner/Documents/code/AmpJack/xbox360/out/voicetest_24000.raw (96000 bytes, s16le mono 24000 Hz)
 plugin pad 0: capture done +370 render done +475 mic dropped +105168 underrun +122880 cancelled +8
 --- summary
 rate  8000: detected yes tone   89% off    0% rms   1472 capture 14449  (first to last completion) B/s render 16028  (first to last completion) B/s
